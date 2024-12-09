@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Table Relationships Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+      }
+      .link {
+        stroke-opacity: 0.6;
+      }
+      .node {
+        stroke: #fff;
+        stroke-width: 1.5px;
+      }
+      .node:hover {
+        stroke: black;
+        stroke-width: 2px;
+      }
+      .text-label {
+        font-size: 12px;
+        fill: #333;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Table Relationships Visualization</h1>
+    <svg id="chart"></svg>
+
+    <script>
+      const width = 800,
+        height = 600;
+
+      // 노드 색상과 링크 색상을 위한 색상 팔레트
+      const nodeColor = d3.scaleOrdinal(d3.schemeSet3); // 다양한 색상의 팔레트
+      const linkColor = d3.scaleOrdinal(d3.schemeCategory10);
+
+      // SVG 설정
+      const svg = d3
+        .select("#chart")
+        .attr("width", width)
+        .attr("height", height);
+
+      // 줌 가능한 그룹 생성
+      const zoomLayer = svg.append("g");
+
+      // 줌 및 팬 기능 추가
+      svg.call(
+        d3
+          .zoom()
+          .scaleExtent([0.1, 5]) // 최소 0.1배, 최대 5배 확대/축소
+          .on("zoom", (event) => {
+            zoomLayer.attr("transform", event.transform);
+          })
+      );
+
+      // 데이터 로드 및 시각화
+      fetch("/data")
+        .then((response) => response.json())
+        .then((data) => {
+          const links = data.links.map((d) => ({ ...d }));
+          const nodes = data.nodes.map((d) => ({ ...d }));
+
+          // Force Simulation
+          const simulation = d3
+            .forceSimulation(nodes)
+            .force(
+              "link",
+              d3
+                .forceLink(links)
+                .id((d) => d.id)
+                .distance(200)
+            )
+            .force("charge", d3.forceManyBody().strength(-300))
+            .force("center", d3.forceCenter(0, 0));
+
+          // 링크 생성
+          const link = zoomLayer
+            .append("g")
+            .attr("class", "links")
+            .selectAll("line")
+            .data(links)
+            .enter()
+            .append("line")
+            .attr("class", "link")
+            .attr("stroke", (d) => linkColor(d.source.id || d.target.id)) // 링크 색상 설정
+            .attr("stroke-width", 1.5);
+
+          // 노드 생성
+          const node = zoomLayer
+            .append("g")
+            .attr("class", "nodes")
+            .selectAll("circle")
+            .data(nodes)
+            .enter()
+            .append("circle")
+            .attr("class", "node")
+            .attr("r", 10)
+            .attr("fill", (d) => nodeColor(d.id)) // 노드 색상 설정
+            .call(
+              d3
+                .drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended)
+            );
+
+          // 노드 라벨 추가
+          zoomLayer
+            .append("g")
+            .selectAll("text")
+            .data(nodes)
+            .enter()
+            .append("text")
+            .attr("class", "text-label")
+            .attr("dy", ".35em")
+            .attr("x", (d) => d.x + 15)
+            .attr("y", (d) => d.y)
+            .text((d) => d.id);
+
+          simulation.on("tick", () => {
+            link
+              .attr("x1", (d) => d.source.x)
+              .attr("y1", (d) => d.source.y)
+              .attr("x2", (d) => d.target.x)
+              .attr("y2", (d) => d.target.y);
+
+            node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
+
+            zoomLayer
+              .selectAll(".text-label")
+              .attr("x", (d) => d.x + 15)
+              .attr("y", (d) => d.y);
+          });
+
+          function dragstarted(event) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            event.subject.fx = event.subject.x;
+            event.subject.fy = event.subject.y;
+          }
+
+          function dragged(event) {
+            event.subject.fx = event.x;
+            event.subject.fy = event.y;
+          }
+
+          function dragended(event) {
+            if (!event.active) simulation.alphaTarget(0);
+            event.subject.fx = null;
+            event.subject.fy = null;
+          }
+        })
+        .catch((error) => console.error("Error loading data:", error));
+    </script>
+  </body>
+</html>
